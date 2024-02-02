@@ -10,6 +10,8 @@ import (
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/gorilla/handlers"
 )
 
 func main() {
@@ -35,8 +37,15 @@ func run() error {
 	log.Printf("listening on http://%v", l.Addr())
 	fmt.Printf("listening on http://%v", l.Addr())
 	cs := NewChatServer()
+	// Define CORS options
+	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"})
+	methodsOk := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"})
+	originsOk := handlers.AllowedOrigins([]string{"http://localhost:3000"})
+
+	// Wrap the chat server with CORS middleware
+	csWithCORS := handlers.CORS(headersOk, methodsOk, originsOk)(cs)
 	s := &http.Server{
-		Handler:      cs,
+		Handler:      csWithCORS,
 		ReadTimeout:  time.Second * 10,
 		WriteTimeout: time.Second * 10,
 	}

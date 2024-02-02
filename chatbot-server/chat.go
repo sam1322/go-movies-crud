@@ -61,6 +61,7 @@ func NewChatServer() *chatServer {
 type subscriber struct {
 	msgs      chan []byte
 	closeSlow func()
+	id        string
 }
 
 func (cs *chatServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +80,7 @@ func (cs *chatServer) subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		cs.logf("%v", err)
+		cs.logf("subscribe error : %v", err)
 		return
 	}
 }
@@ -115,7 +116,9 @@ func (cs *chatServer) subscribe(ctx context.Context, w http.ResponseWriter, r *h
 	var mu sync.Mutex
 	var c *websocket.Conn
 	var closed bool
+	log.Printf("subscribeHandler: %v\n", r.Header.Get("Origin"))
 	s := &subscriber{
+		id:   r.Header.Get("Origin"),
 		msgs: make(chan []byte, cs.subscriberMessageBuffer),
 		closeSlow: func() {
 			mu.Lock()
@@ -129,7 +132,12 @@ func (cs *chatServer) subscribe(ctx context.Context, w http.ResponseWriter, r *h
 	cs.addSubscriber(s)
 	defer cs.deleteSubscriber(s)
 
-	c2, err := websocket.Accept(w, r, nil)
+	opts := &websocket.AcceptOptions{
+		InsecureSkipVerify: true, // Skip origin check for demonstration purposes
+	}
+
+	c2, err := websocket.Accept(w, r, opts)
+
 	if err != nil {
 		return err
 	}
@@ -143,7 +151,6 @@ func (cs *chatServer) subscribe(ctx context.Context, w http.ResponseWriter, r *h
 	defer c.CloseNow()
 
 	ctx = c.CloseRead(ctx)
-
 	for {
 		select {
 		case msg := <-s.msgs:
@@ -167,6 +174,7 @@ func (cs *chatServer) publish(msg []byte) {
 	cs.publishLimiter.Wait(context.Background())
 
 	for s := range cs.subscribers {
+		log.Printf("publishing msg: %v to %v\n", string(msg), s.id)
 		select {
 		case s.msgs <- msg:
 		default:
@@ -178,14 +186,25 @@ func (cs *chatServer) publish(msg []byte) {
 // addSubscriber registers a subscriber.
 func (cs *chatServer) addSubscriber(s *subscriber) {
 	cs.subscribersMu.Lock()
+	// log.Printf("adding a Subscriber: %v\n", s.id)
+
 	cs.subscribers[s] = struct{}{}
+	// for key, _ := range cs.subscribers {
+	// 	log.Printf("Key: %v\n", key.id)
+	// }
 	cs.subscribersMu.Unlock()
 }
 
 // deleteSubscriber deletes the given subscriber.
 func (cs *chatServer) deleteSubscriber(s *subscriber) {
 	cs.subscribersMu.Lock()
+	// log.Printf("deleting a Subscriber: %v\n", s.id)
 	delete(cs.subscribers, s)
+	// log.Println("List of subscribers left:")
+	// for key, _ := range cs.subscribers {
+	// 	log.Printf("Key: %v\n", key.id)
+	// }
+
 	cs.subscribersMu.Unlock()
 }
 
