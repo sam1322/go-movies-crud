@@ -130,7 +130,13 @@ func main() {
 	router.HandleFunc("/movies/create", createMovie).Methods("POST")
 	router.HandleFunc("/movies/update/{id}", updateMovie).Methods("POST")
 	router.HandleFunc("/movies/delete/{id}", deleteMovies).Methods("DELETE")
-	http.Handle("/", router)
+
+	cs := NewChatServer()
+
+	router.HandleFunc("/subscribe", cs.subscribeHandler)
+	router.HandleFunc("/send", cs.publishHandler).Methods("POST")
+
+	// http.Handle("/", router)
 	fmt.Println("Starting server at port 8080")
 
 	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"})
